@@ -3,11 +3,25 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --roommat-teal: #158078;
+  --roommat-teal-hover: #126b65;
+  --roommat-orange: #f27420;
+  --roommat-orange-hover: #e06612;
+  --roommat-mint-bg: #f0f9f8;
+  --roommat-muted: #64748b;
+  --roommat-card: #ffffff;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-roommat-teal: var(--roommat-teal);
+  --color-roommat-teal-hover: var(--roommat-teal-hover);
+  --color-roommat-orange: var(--roommat-orange);
+  --color-roommat-orange-hover: var(--roommat-orange-hover);
+  --color-roommat-mint-bg: var(--roommat-mint-bg);
+  --color-roommat-muted: var(--roommat-muted);
+  --color-roommat-card: var(--roommat-card);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }

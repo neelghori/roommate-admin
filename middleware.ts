@@ -27,9 +27,20 @@ function hasSession(request: NextRequest): boolean {
   }
 }
 
+function isRootPath(pathname: string): boolean {
+  return pathname === "/" || pathname === "";
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const authed = hasSession(request);
+
+  if (isRootPath(pathname)) {
+    const url = request.nextUrl.clone();
+    url.pathname = authed ? "/dashboard" : "/login";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
 
   if (isProtectedPath(pathname) && !authed) {
     const url = request.nextUrl.clone();
@@ -50,6 +61,7 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/",
     "/dashboard",
     "/dashboard/:path*",
     "/login",

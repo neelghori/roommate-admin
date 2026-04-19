@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { FaqModule } from "@/components/dashboard/faq-module";
-import { fetchFaqs } from "@/lib/api/admin-faqs";
+import { AmenitiesModule } from "@/components/dashboard/amenities-module";
+import { fetchAmenities } from "@/lib/api/admin-amenities";
 import { ADMIN_ACCESS_TOKEN_COOKIE } from "@/lib/auth/constants";
 
 export const metadata: Metadata = {
-  title: "FAQ",
-  description: "Frequently asked questions for Roommat admin.",
+  title: "Amenities",
+  description: "Manage listing amenities and icons for Roommat.",
 };
 
 function tokenFromCookie(raw: string | undefined): string | null {
@@ -19,7 +19,7 @@ function tokenFromCookie(raw: string | undefined): string | null {
   }
 }
 
-export default async function FaqPage() {
+export default async function AmenitiesPage() {
   const cookieStore = await cookies();
   const token = tokenFromCookie(
     cookieStore.get(ADMIN_ACCESS_TOKEN_COOKIE)?.value,
@@ -27,15 +27,17 @@ export default async function FaqPage() {
 
   if (!token) {
     return (
-      <FaqModule initialItems={[]} initialError="You are not signed in." />
+      <AmenitiesModule initialItems={[]} initialError="You are not signed in." />
     );
   }
 
-  const result = await fetchFaqs(token);
+  const result = await fetchAmenities(token);
 
   if (!result.ok) {
-    return <FaqModule initialItems={[]} initialError={result.message} />;
+    return (
+      <AmenitiesModule initialItems={[]} initialError={result.message} />
+    );
   }
 
-  return <FaqModule initialItems={result.items} />;
+  return <AmenitiesModule initialItems={result.items} />;
 }

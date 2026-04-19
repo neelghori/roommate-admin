@@ -1,16 +1,26 @@
 "use client";
 
 import Link from "next/link";
+import type { ComponentProps } from "react";
 import { clearAdminAccessToken } from "@/lib/auth/admin-token";
 
-export function SignOutLink({ className }: { className?: string }) {
+export function SignOutLink({
+  className,
+  onClick,
+  children = "Sign out",
+  ...rest
+}: Omit<ComponentProps<typeof Link>, "href">) {
   return (
     <Link
       href="/login"
       className={className}
-      onClick={() => clearAdminAccessToken()}
+      {...rest}
+      onClick={(e) => {
+        clearAdminAccessToken();
+        onClick?.(e);
+      }}
     >
-      Sign out
+      {children}
     </Link>
   );
 }

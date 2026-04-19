@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import * as Yup from "yup";
 import { toast } from "sonner";
 import { useFormikForm } from "@/hooks/use-formik-form";
 import {
-  FAQ_DEFAULT_ITEMS,
+  createFaq,
+  deleteFaq,
+  fetchFaqs,
+  updateFaq,
   type FaqItem,
-  loadAdminFaqs,
-  newFaqId,
-  saveAdminFaqs,
-} from "@/lib/faq/admin-faq-store";
+} from "@/lib/api/admin-faqs";
+import { getAdminAccessToken } from "@/lib/auth/admin-token";
 
 export type { FaqItem };
 
@@ -21,10 +22,17 @@ const addSchema = Yup.object({
 
 type AddFormValues = Yup.InferType<typeof addSchema>;
 
-export function FaqModule() {
-  const [items, setItems] = useState<FaqItem[]>(FAQ_DEFAULT_ITEMS);
+type FaqModuleProps = {
+  initialItems: FaqItem[];
+  initialError?: string | null;
+};
+
+export function FaqModule({
+  initialItems,
+  initialError = null,
+}: FaqModuleProps) {
+  const [items, setItems] = useState<FaqItem[]>(initialItems);
   const [query, setQuery] = useState("");
-  const [mounted, setMounted] = useState(false);
   const [showAddPanel, setShowAddPanel] = useState(true);
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -33,16 +41,48 @@ export function FaqModule() {
     question?: string;
     answer?: string;
   }>({});
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [loadState, setLoadState] = useState<"idle" | "loading" | "error">(
+    initialError ? "error" : "idle",
+  );
+  const [errorMessage, setErrorMessage] = useState<string | null>(
+    initialError,
+  );
 
-  useEffect(() => {
-    setItems(loadAdminFaqs());
-    setMounted(true);
+  const loadFaqs = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
+    const token = getAdminAccessToken();
+    if (!token) {
+      if (!silent) {
+        setLoadState("error");
+        setErrorMessage("You are not signed in.");
+      }
+      return;
+    }
+    if (!silent) {
+      setLoadState("loading");
+      setErrorMessage(null);
+    }
+    const result = await fetchFaqs(token);
+    if (!result.ok) {
+      if (!silent) {
+        setLoadState("error");
+        setErrorMessage(result.message);
+        toast.error(result.message);
+      } else {
+        toast.error(result.message);
+      }
+      return;
+    }
+    setItems(result.items);
+    if (!silent) {
+      setLoadState("idle");
+    }
   }, []);
 
-  useEffect(() => {
-    if (!mounted) return;
-    saveAdminFaqs(items);
-  }, [items, mounted]);
+  const reloadItemsSilent = useCallback(async () => {
+    await loadFaqs({ silent: true });
+  }, [loadFaqs]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -57,16 +97,26 @@ export function FaqModule() {
   const addForm = useFormikForm<AddFormValues>({
     initialValues: { question: "", answer: "" },
     validationSchema: addSchema,
-    onSubmit: (values, { resetForm }) => {
-      const next: FaqItem = {
-        id: newFaqId(),
+    onSubmit: async (values, { resetForm, setSubmitting }) => {
+      const token = getAdminAccessToken();
+      if (!token) {
+        toast.error("You are not signed in.");
+        setSubmitting(false);
+        return;
+      }
+      const created = await createFaq(token, {
         question: values.question.trim(),
         answer: values.answer.trim(),
-      };
-      setItems((prev) => [next, ...prev]);
-      setOpenIds((prev) => new Set(prev).add(next.id));
+      });
+      if (!created.ok) {
+        toast.error(created.message);
+        setSubmitting(false);
+        return;
+      }
+      await reloadItemsSilent();
       resetForm();
-      toast.success("Saved to your FAQ list.");
+      toast.success("FAQ created.");
+      setSubmitting(false);
     },
   });
 
@@ -87,7 +137,7 @@ export function FaqModule() {
     setEditFieldErrors({});
   }
 
-  function saveEdit() {
+  async function saveEdit() {
     if (!editingId) return;
     const q = editDraft.question.trim();
     const a = editDraft.answer.trim();
@@ -98,11 +148,22 @@ export function FaqModule() {
       setEditFieldErrors(err);
       return;
     }
-    setItems((prev) =>
-      prev.map((x) =>
-        x.id === editingId ? { ...x, question: q, answer: a } : x,
-      ),
-    );
+    const token = getAdminAccessToken();
+    if (!token) {
+      toast.error("You are not signed in.");
+      return;
+    }
+    setSavingEdit(true);
+    const result = await updateFaq(token, editingId, {
+      question: q,
+      answer: a,
+    });
+    setSavingEdit(false);
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
+    await reloadItemsSilent();
     setEditingId(null);
     setEditFieldErrors({});
     toast.success("FAQ updated.");
@@ -110,17 +171,48 @@ export function FaqModule() {
 
   function removeFaq(item: FaqItem) {
     if (editingId === item.id) cancelEdit();
-    const ok = window.confirm(
-      `Remove this FAQ?\n\n“${item.question.slice(0, 80)}${item.question.length > 80 ? "…" : ""}”`,
-    );
-    if (!ok) return;
-    setItems((prev) => prev.filter((x) => x.id !== item.id));
-    setOpenIds((prev) => {
-      const next = new Set(prev);
-      next.delete(item.id);
-      return next;
+
+    const preview =
+      item.question.length > 120
+        ? `${item.question.slice(0, 120)}…`
+        : item.question;
+
+    const toastId = toast.warning("Remove this FAQ?", {
+      description: preview,
+      duration: Number.POSITIVE_INFINITY,
+      action: {
+        label: "Remove",
+        onClick: () => {
+          void (async () => {
+            const token = getAdminAccessToken();
+            if (!token) {
+              toast.dismiss(toastId);
+              toast.error("You are not signed in.");
+              return;
+            }
+            const result = await deleteFaq(token, item.id);
+            toast.dismiss(toastId);
+            if (!result.ok) {
+              toast.error(result.message);
+              return;
+            }
+            setOpenIds((prev) => {
+              const next = new Set(prev);
+              next.delete(item.id);
+              return next;
+            });
+            await reloadItemsSilent();
+            toast.success("FAQ removed.");
+          })();
+        },
+      },
+      cancel: {
+        label: "Cancel",
+        onClick: () => {
+          toast.dismiss(toastId);
+        },
+      },
     });
-    toast.success("FAQ removed.");
   }
 
   function toggleOpen(id: string) {
@@ -139,6 +231,11 @@ export function FaqModule() {
         : "border-neutral-200 bg-white focus:border-roommat-teal focus:ring-roommat-teal/20"
     }`;
 
+  const isLoading = loadState === "loading";
+  const isError = loadState === "error";
+  const listEmpty = items.length === 0;
+  const noMatches = filtered.length === 0;
+
   return (
     <div className="space-y-8 pb-10">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -151,19 +248,32 @@ export function FaqModule() {
           </h1>
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-roommat-muted sm:text-base">
             Keep answers in one place so your admin team finds them fast. Add
-            entries below — they stay saved on this computer for next time.
+            and edit entries below — they are stored on the server for everyone
+            on your team.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <span className="inline-flex items-center gap-2 rounded-full border border-roommat-teal/20 bg-roommat-mint-bg/60 px-4 py-2 text-sm font-medium text-roommat-teal">
             <span className="tabular-nums font-bold text-neutral-900">
-              {items.length}
+              {isLoading || isError ? "—" : items.length}
             </span>
             {items.length === 1 ? "question" : "questions"}
           </span>
         </div>
       </div>
 
+      {isError ? (
+        <div className="rounded-2xl border border-red-100 bg-red-50/40 px-6 py-8 text-center">
+          <p className="text-sm text-red-700">{errorMessage}</p>
+          <button
+            type="button"
+            onClick={() => void loadFaqs()}
+            className="mt-4 rounded-full bg-roommat-teal px-4 py-2 text-sm font-semibold text-white hover:bg-roommat-teal-hover"
+          >
+            Try again
+          </button>
+        </div>
+      ) : (
       <div className="grid gap-8 lg:grid-cols-12 lg:items-start">
         {/* Add panel */}
         <section className="lg:col-span-5 xl:col-span-4">
@@ -173,6 +283,7 @@ export function FaqModule() {
               onClick={() => setShowAddPanel((v) => !v)}
               className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-white/60 sm:px-6"
               aria-expanded={showAddPanel}
+              disabled={isLoading}
             >
               <div className="flex items-center gap-3">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-roommat-teal text-white shadow-sm">
@@ -234,6 +345,7 @@ export function FaqModule() {
                     rows={3}
                     placeholder="e.g. How do I reset someone’s password?"
                     {...addForm.getFieldProps("question")}
+                    disabled={isLoading}
                     className={`resize-y ${inputStyles(qInvalid)}`}
                   />
                   {qInvalid ? (
@@ -256,6 +368,7 @@ export function FaqModule() {
                     rows={5}
                     placeholder="Short steps or explanation — you can change this anytime with Edit."
                     {...addForm.getFieldProps("answer")}
+                    disabled={isLoading}
                     className={`resize-y ${inputStyles(aInvalid)}`}
                   />
                   {aInvalid ? (
@@ -269,7 +382,7 @@ export function FaqModule() {
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                   <button
                     type="submit"
-                    disabled={addForm.isSubmitting}
+                    disabled={addForm.isSubmitting || isLoading}
                     className="inline-flex h-11 flex-1 items-center justify-center rounded-xl bg-roommat-teal px-6 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-roommat-teal-hover disabled:cursor-not-allowed disabled:opacity-70 sm:flex-none"
                   >
                     Save to list
@@ -277,7 +390,8 @@ export function FaqModule() {
                   <button
                     type="button"
                     onClick={() => addForm.resetForm()}
-                    className="inline-flex h-11 items-center justify-center rounded-xl border border-neutral-200 bg-white px-6 text-sm font-semibold text-neutral-700 transition-colors hover:bg-neutral-50"
+                    disabled={isLoading}
+                    className="inline-flex h-11 items-center justify-center rounded-xl border border-neutral-200 bg-white px-6 text-sm font-semibold text-neutral-700 transition-colors hover:bg-neutral-50 disabled:opacity-50"
                   >
                     Clear form
                   </button>
@@ -312,14 +426,16 @@ export function FaqModule() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search by keyword…"
-                className="w-full rounded-xl border border-neutral-200 bg-white py-3 pl-10 pr-10 text-sm shadow-md shadow-neutral-900/5 outline-none transition focus:border-roommat-teal focus:ring-2 focus:ring-roommat-teal/20"
+                disabled={isLoading}
+                className="w-full rounded-xl border border-neutral-200 bg-white py-3 pl-10 pr-10 text-sm shadow-md shadow-neutral-900/5 outline-none transition focus:border-roommat-teal focus:ring-2 focus:ring-roommat-teal/20 disabled:opacity-50"
                 aria-label="Search FAQs"
               />
               {query ? (
                 <button
                   type="button"
                   onClick={() => setQuery("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2 py-1 text-xs font-semibold text-roommat-teal hover:bg-roommat-mint-bg/50"
+                  disabled={isLoading}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2 py-1 text-xs font-semibold text-roommat-teal hover:bg-roommat-mint-bg/50 disabled:opacity-50"
                 >
                   Clear
                 </button>
@@ -344,21 +460,37 @@ export function FaqModule() {
             )}
           </p>
 
-          {filtered.length === 0 ? (
+          {isLoading ? (
+            <div className="rounded-2xl border border-neutral-100 bg-white px-6 py-14 text-center text-sm text-roommat-muted">
+              Loading FAQs…
+            </div>
+          ) : noMatches ? (
             <div className="rounded-2xl border-2 border-dashed border-neutral-200 bg-roommat-mint-bg/25 px-6 py-14 text-center">
-              <p className="font-medium text-neutral-800">No matches</p>
-              <p className="mt-2 text-sm text-roommat-muted">
-                Try a different search, or clear the box to see everything again.
-              </p>
-              {query.trim() ? (
-                <button
-                  type="button"
-                  onClick={() => setQuery("")}
-                  className="mt-5 rounded-xl bg-roommat-teal px-5 py-2.5 text-sm font-semibold text-white hover:bg-roommat-teal-hover"
-                >
-                  Clear search
-                </button>
-              ) : null}
+              {listEmpty && !query.trim() ? (
+                <>
+                  <p className="font-medium text-neutral-800">No FAQs yet</p>
+                  <p className="mt-2 text-sm text-roommat-muted">
+                    Add your first question and answer using the panel on the
+                    left.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-medium text-neutral-800">No matches</p>
+                  <p className="mt-2 text-sm text-roommat-muted">
+                    Try a different search, or clear the box to see everything again.
+                  </p>
+                  {query.trim() ? (
+                    <button
+                      type="button"
+                      onClick={() => setQuery("")}
+                      className="mt-5 rounded-xl bg-roommat-teal px-5 py-2.5 text-sm font-semibold text-white hover:bg-roommat-teal-hover"
+                    >
+                      Clear search
+                    </button>
+                  ) : null}
+                </>
+              )}
             </div>
           ) : (
             <ul className="space-y-3">
@@ -410,6 +542,7 @@ export function FaqModule() {
                                   question: e.target.value,
                                 }))
                               }
+                              disabled={savingEdit}
                               className={`resize-y ${inputStyles(Boolean(editFieldErrors.question))}`}
                             />
                             {editFieldErrors.question ? (
@@ -435,6 +568,7 @@ export function FaqModule() {
                                   answer: e.target.value,
                                 }))
                               }
+                              disabled={savingEdit}
                               className={`resize-y ${inputStyles(Boolean(editFieldErrors.answer))}`}
                             />
                             {editFieldErrors.answer ? (
@@ -446,15 +580,17 @@ export function FaqModule() {
                           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                             <button
                               type="button"
-                              onClick={saveEdit}
-                              className="inline-flex h-11 flex-1 items-center justify-center rounded-xl bg-roommat-teal px-6 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-roommat-teal-hover sm:flex-none"
+                              onClick={() => void saveEdit()}
+                              disabled={savingEdit}
+                              className="inline-flex h-11 flex-1 items-center justify-center rounded-xl bg-roommat-teal px-6 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-roommat-teal-hover disabled:cursor-not-allowed disabled:opacity-70 sm:flex-none"
                             >
                               Save changes
                             </button>
                             <button
                               type="button"
                               onClick={cancelEdit}
-                              className="inline-flex h-11 items-center justify-center rounded-xl border border-neutral-200 bg-white px-6 text-sm font-semibold text-neutral-700 transition-colors hover:bg-neutral-50"
+                              disabled={savingEdit}
+                              className="inline-flex h-11 items-center justify-center rounded-xl border border-neutral-200 bg-white px-6 text-sm font-semibold text-neutral-700 transition-colors hover:bg-neutral-50 disabled:opacity-50"
                             >
                               Cancel
                             </button>
@@ -558,6 +694,7 @@ export function FaqModule() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { RoommatLogo } from "@/components/auth/roommat-logo";
 import { ProfileMenu } from "./profile-menu";
-import { SignOutLink } from "./sign-out-link";
 
 const nav = [
   {
@@ -55,6 +54,16 @@ const nav = [
     icon: (
       <svg className="h-[1.125rem] w-[1.125rem]" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden>
         <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.771-1.025 4.942 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
+      </svg>
+    ),
+  },
+  {
+    href: "/dashboard/amenities",
+    label: "Amenities",
+    match: (p: string) => p.startsWith("/dashboard/amenities"),
+    icon: (
+      <svg className="h-[1.125rem] w-[1.125rem]" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655-5.653a2.548 2.548 0 010-3.286l3.016-3.659A2.548 2.548 0 0112.183 2.25h7.634a2.548 2.548 0 011.816.754l3.016 3.659a2.548 2.548 0 010 3.286l-4.655 5.653M11.42 15.17l-2.496-3.03a2.548 2.548 0 010-3.286l4.655-5.653" />
       </svg>
     ),
   },
@@ -126,13 +135,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-roommat-orange ring-2 ring-white" />
             </button>
             <ProfileMenu />
-            <button
-              type="button"
-              className="rounded-full bg-roommat-orange px-4 py-2 text-sm font-semibold text-white shadow-md shadow-roommat-orange/20 transition-all hover:bg-roommat-orange-hover hover:shadow-lg hover:shadow-roommat-orange/25"
-            >
-              Add listing
-            </button>
-            <SignOutLink className="hidden rounded-xl px-3 py-2 text-sm font-semibold text-roommat-muted transition-colors hover:text-roommat-teal sm:inline" />
           </div>
         </div>
 

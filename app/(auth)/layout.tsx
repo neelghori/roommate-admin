@@ -1,5 +1,4 @@
 import { Poppins } from "next/font/google";
-import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 const poppins = Poppins({
@@ -7,14 +6,6 @@ const poppins = Poppins({
   weight: ["400", "500", "600", "700"],
   variable: "--font-poppins",
 });
-
-export const metadata: Metadata = {
-  title: {
-    template: "%s · Roommat Admin",
-    default: "Roommat Admin",
-  },
-  description: "Admin panel for Roommat — rooms and PG listings.",
-};
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (

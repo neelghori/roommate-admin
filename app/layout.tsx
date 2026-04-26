@@ -13,7 +13,13 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+/** Same env name as roommate-website so deployed admin resolves icon URLs correctly. */
+const BASE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ??
+  "http://localhost:3000";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(BASE_URL),
   title: {
     template: "%s · Roommat Admin",
     default: "Roommat Admin",
@@ -21,9 +27,10 @@ export const metadata: Metadata = {
   description: "Roommat admin — manage rooms, PG listings, and tenants.",
   icons: {
     icon: [{ url: "/favicon.ico" }],
-    apple: [{ url: "/roomatelogo.png" }],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
     shortcut: "/favicon.ico",
   },
+  manifest: "/site.webmanifest",
 };
 
 export default function RootLayout({

@@ -5,6 +5,12 @@ export const ADMIN_USERS_PATH = "/api/v1/admin/users";
 
 export type AdminAccountStatus = "active" | "inactive";
 
+export type IdentityVerificationStatus =
+  | "none"
+  | "pending"
+  | "verified"
+  | "rejected";
+
 export type AdminUserRow = {
   id: string;
   name: string;
@@ -12,7 +18,10 @@ export type AdminUserRow = {
   adminRole: string;
   accountStatus: AdminAccountStatus;
   lastLogin: string;
+  identityVerificationStatus: IdentityVerificationStatus;
 };
+
+export type AdminUserDetail = Record<string, unknown>;
 
 function buildUrl(path: string): string {
   return `${getPublicApiBaseUrl()}${path}`;
@@ -53,6 +62,16 @@ function pickAccountStatus(
   }
 
   return "active";
+}
+
+function pickIdentityStatus(
+  o: Record<string, unknown>,
+): IdentityVerificationStatus {
+  const s = pickString(o, ["identityVerificationStatus"])?.toLowerCase();
+  if (s === "pending" || s === "verified" || s === "rejected" || s === "none") {
+    return s;
+  }
+  return "none";
 }
 
 function formatLastLogin(value: string | null): string {
@@ -114,6 +133,7 @@ function mapItemToRow(raw: unknown): AdminUserRow | null {
     adminRole,
     accountStatus: pickAccountStatus(o),
     lastLogin: formatLastLogin(lastLoginRaw),
+    identityVerificationStatus: pickIdentityStatus(o),
   };
 }
 
@@ -272,4 +292,204 @@ export async function fetchAdminUsers(
     .filter((r): r is AdminUserRow => r !== null);
 
   return { ok: true, users: rows };
+}
+
+function extractNestedUser(body: unknown): AdminUserDetail | null {
+  if (!body || typeof body !== "object") return null;
+  const root = body as Record<string, unknown>;
+  const data = root.data;
+  if (!data || typeof data !== "object") return null;
+  const inner = data as Record<string, unknown>;
+  const user = inner.user;
+  if (!user || typeof user !== "object" || Array.isArray(user)) return null;
+  return user as AdminUserDetail;
+}
+
+export type FetchAdminUserSuccess = { ok: true; user: AdminUserDetail };
+export type FetchAdminUserFailure = {
+  ok: false;
+  message: string;
+  status: number;
+};
+export type FetchAdminUserResult = FetchAdminUserSuccess | FetchAdminUserFailure;
+
+export async function fetchAdminUser(
+  accessToken: string,
+  userId: string,
+): Promise<FetchAdminUserResult> {
+  let res: Response;
+  try {
+    res = await fetch(buildUrl(`${ADMIN_USERS_PATH}/${encodeURIComponent(userId)}`), {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+  } catch {
+    return {
+      ok: false,
+      message: "Cannot reach server. Is the API running?",
+      status: 0,
+    };
+  }
+
+  let body: unknown = null;
+  try {
+    const text = await res.text();
+    if (text) body = JSON.parse(text) as unknown;
+  } catch {
+    body = null;
+  }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      message: extractErrorMessage(body, res.status, "Could not load user."),
+      status: res.status,
+    };
+  }
+
+  const user = extractNestedUser(body);
+  if (!user) {
+    return {
+      ok: false,
+      message: "Invalid user response from server.",
+      status: res.status,
+    };
+  }
+
+  return { ok: true, user };
+}
+
+export type PostAdminIdentityReviewRequest = {
+  action: "verify" | "reject";
+  reason?: string;
+};
+
+export type PostAdminIdentityReviewResult =
+  | { ok: true; user: AdminUserDetail }
+  | { ok: false; message: string; status: number };
+
+export async function postAdminIdentityReview(
+  accessToken: string,
+  userId: string,
+  payload: PostAdminIdentityReviewRequest,
+): Promise<PostAdminIdentityReviewResult> {
+  let res: Response;
+  try {
+    res = await fetch(
+      buildUrl(`${ADMIN_USERS_PATH}/${encodeURIComponent(userId)}/identity-review`),
+      {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          action: payload.action,
+          ...(payload.reason != null && payload.reason.trim()
+            ? { reason: payload.reason.trim() }
+            : {}),
+        }),
+      },
+    );
+  } catch {
+    return {
+      ok: false,
+      message: "Cannot reach server. Is the API running?",
+      status: 0,
+    };
+  }
+
+  let body: unknown = null;
+  try {
+    const text = await res.text();
+    if (text) body = JSON.parse(text) as unknown;
+  } catch {
+    body = null;
+  }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      message: extractErrorMessage(
+        body,
+        res.status,
+        "Could not update verification.",
+      ),
+      status: res.status,
+    };
+  }
+
+  const user = extractNestedUser(body);
+  if (!user) {
+    return {
+      ok: false,
+      message: "Invalid response from server.",
+      status: res.status,
+    };
+  }
+
+  return { ok: true, user };
+}
+
+export type PatchAdminUserResult =
+  | { ok: true; user: AdminUserDetail }
+  | { ok: false; message: string; status: number };
+
+export async function patchAdminUserActive(
+  accessToken: string,
+  userId: string,
+  isActive: boolean,
+): Promise<PatchAdminUserResult> {
+  let res: Response;
+  try {
+    res = await fetch(buildUrl(`${ADMIN_USERS_PATH}/${encodeURIComponent(userId)}`), {
+      method: "PATCH",
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ isActive }),
+    });
+  } catch {
+    return {
+      ok: false,
+      message: "Cannot reach server. Is the API running?",
+      status: 0,
+    };
+  }
+
+  let body: unknown = null;
+  try {
+    const text = await res.text();
+    if (text) body = JSON.parse(text) as unknown;
+  } catch {
+    body = null;
+  }
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      message: extractErrorMessage(body, res.status, "Could not update access."),
+      status: res.status,
+    };
+  }
+
+  const user = extractNestedUser(body);
+  if (!user) {
+    return {
+      ok: false,
+      message: "Invalid response from server.",
+      status: res.status,
+    };
+  }
+
+  return { ok: true, user };
 }

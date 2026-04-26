@@ -6,7 +6,7 @@ import { ADMIN_ACCESS_TOKEN_COOKIE } from "@/lib/auth/constants";
 
 export const metadata: Metadata = {
   title: "Admin users",
-  description: "Manage admin panel staff — roles and active access.",
+  description: "View platform users, identity verification, and access.",
 };
 
 function tokenFromCookie(raw: string | undefined): string | null {

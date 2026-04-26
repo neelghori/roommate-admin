@@ -20,8 +20,9 @@ export const metadata: Metadata = {
   },
   description: "Roommat admin — manage rooms, PG listings, and tenants.",
   icons: {
-    icon: "/roomatelogo.png",
-    apple: "/roomatelogo.png",
+    icon: [{ url: "/favicon.ico" }],
+    apple: [{ url: "/roomatelogo.png" }],
+    shortcut: "/favicon.ico",
   },
 };
 

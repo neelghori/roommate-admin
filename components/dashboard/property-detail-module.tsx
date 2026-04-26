@@ -3,6 +3,10 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import type { AdminPropertyRow } from "@/lib/api/admin-properties";
+import { collectListingGalleryUrls } from "@/lib/listingGalleryUrls";
+import { AdminListingLocationMap } from "@/components/dashboard/admin-listing-location-map";
+import { mapRawListerToAdminView } from "@/components/dashboard/admin-resident-details";
+import { AdminResidentsListSection } from "@/components/dashboard/admin-residents-list-section";
 
 function formatPrice(n: number): string {
   if (n == null || Number.isNaN(n)) return "—";
@@ -47,9 +51,24 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="grid gap-1 border-b border-neutral-100 py-2.5 sm:grid-cols-[160px_1fr] sm:items-start">
       <dt className="text-xs font-semibold text-neutral-500">{label}</dt>
-      <dd className="text-sm text-neutral-900 break-words">{value ?? "—"}</dd>
+      <dd className="break-words text-sm text-neutral-900">{value ?? "—"}</dd>
     </div>
   );
+}
+
+function buildLocationLabel(
+  location: Record<string, unknown> | undefined,
+  address: Record<string, unknown> | undefined,
+): string {
+  const fa = location && pickString(location.formattedAddress).trim();
+  if (fa) return fa;
+  const parts = [
+    pickString(address?.line1),
+    pickString(address?.line2),
+    pickString(address?.city),
+    pickString(address?.state),
+  ].filter(Boolean);
+  return parts.join(", ");
 }
 
 export function PropertyDetailModule({
@@ -79,15 +98,16 @@ export function PropertyDetailModule({
     .map((a) => pickString(a.name).trim())
     .filter(Boolean);
 
-  const imageUrls: string[] = [];
-  const cover = pickString(property.coverImageUrl);
-  if (cover) imageUrls.push(cover);
-  const imgs = property.imageUrls;
-  if (Array.isArray(imgs)) {
-    for (const u of imgs) {
-      if (typeof u === "string" && u && !imageUrls.includes(u)) imageUrls.push(u);
-    }
-  }
+  const gallery = collectListingGalleryUrls(property);
+  const locationLabel = buildLocationLabel(location, address);
+
+  const residentViews = (Array.isArray(listerSnaps) ? listerSnaps : [])
+    .map((entry) => mapRawListerToAdminView(entry))
+    .filter((v): v is NonNullable<typeof v> => v != null);
+
+  const legacyView = listerLegacy
+    ? mapRawListerToAdminView(listerLegacy)
+    : null;
 
   return (
     <div className="space-y-8">
@@ -105,26 +125,37 @@ export function PropertyDetailModule({
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="space-y-6">
-          {imageUrls.length > 0 && (
+          {gallery.length > 0 && (
             <section className="rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
               <SectionTitle>Photos</SectionTitle>
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {imageUrls.map((url, i) => (
-                  <a
-                    key={`${url}-${i}`}
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="aspect-video overflow-hidden rounded-xl bg-neutral-100 ring-1 ring-neutral-100"
-                  >
-                    <img
-                      src={url}
-                      alt=""
-                      className="h-full w-full object-cover transition hover:opacity-90"
-                    />
-                  </a>
-                ))}
+              <div className="mt-3 overflow-hidden rounded-2xl border border-neutral-100 bg-neutral-50 ring-1 ring-neutral-100">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={gallery[0]}
+                  alt=""
+                  className="aspect-[16/10] w-full object-cover sm:aspect-[21/9]"
+                />
               </div>
+              {gallery.length > 1 && (
+                <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
+                  {gallery.slice(1).map((url, i) => (
+                    <a
+                      key={`${url}-${i}`}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="aspect-video overflow-hidden rounded-xl bg-neutral-100 ring-1 ring-neutral-100"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={url}
+                        alt=""
+                        className="h-full w-full object-cover transition hover:opacity-90"
+                      />
+                    </a>
+                  ))}
+                </div>
+              )}
             </section>
           )}
 
@@ -193,17 +224,12 @@ export function PropertyDetailModule({
           </section>
 
           <section className="rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
-            <SectionTitle>Map / coordinates</SectionTitle>
-            <dl className="mt-2">
-              <DetailRow
-                label="Latitude"
-                value={lat != null ? String(lat) : "—"}
-              />
-              <DetailRow
-                label="Longitude"
-                value={lng != null ? String(lng) : "—"}
-              />
-            </dl>
+            <h2 className="mb-2 text-sm font-bold text-neutral-900">Location</h2>
+            <AdminListingLocationMap
+              latitude={lat}
+              longitude={lng}
+              locationLabel={locationLabel || pickString(address?.line1) || "Property"}
+            />
           </section>
 
           <section className="rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
@@ -249,55 +275,12 @@ export function PropertyDetailModule({
             </section>
           ) : null}
 
-          {Array.isArray(listerSnaps) && listerSnaps.length > 0 ? (
-            <section className="rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
-              <SectionTitle>Residents ({listerSnaps.length})</SectionTitle>
-              <ul className="mt-3 space-y-4">
-                {listerSnaps.map((entry, i) => {
-                  const lister = entry as Record<string, unknown>;
-                  if (!lister || typeof lister !== "object") return null;
-                  return (
-                    <li
-                      key={`lister-${i}`}
-                      className="rounded-xl border border-neutral-100 bg-neutral-50/80 p-3"
-                    >
-                      <p className="text-xs font-semibold text-neutral-600 mb-2">#{i + 1}</p>
-                      <dl>
-                        {Object.entries(lister).map(([k, v]) => (
-                          <DetailRow
-                            key={k}
-                            label={k}
-                            value={
-                              v != null && typeof v === "object"
-                                ? JSON.stringify(v)
-                                : pickString(v)
-                            }
-                          />
-                        ))}
-                      </dl>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ) : listerLegacy && Object.keys(listerLegacy).length > 0 ? (
-            <section className="rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
-              <SectionTitle>Lister snapshot (legacy)</SectionTitle>
-              <dl className="mt-2">
-                {Object.entries(listerLegacy).map(([k, v]) => (
-                  <DetailRow
-                    key={k}
-                    label={k}
-                    value={
-                      v != null && typeof v === "object"
-                        ? JSON.stringify(v)
-                        : pickString(v)
-                    }
-                  />
-                ))}
-              </dl>
-            </section>
-          ) : null}
+          {(residentViews.length > 0 || legacyView) && (
+            <AdminResidentsListSection
+              residentViews={residentViews}
+              legacyView={legacyView}
+            />
+          )}
         </div>
 
         <aside className="space-y-4">

@@ -29,9 +29,10 @@ function pickString(v: unknown): string {
 
 const LISTING_TYPE_LABEL: Record<string, string> = {
   pg: "PG",
-  flat: "Flat / Apartment",
-  room: "Room / Rent",
+  flat: "Flat",
+  room: "Room",
   roommate_seeker: "Roommate",
+  coworking_space: "Co-Working Space",
 };
 
 type PropertyDetailModuleProps = {

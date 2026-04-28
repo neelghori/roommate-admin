@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getPublicApiBaseUrl } from "@/lib/env";
+import { buildApiWebSocketUrl } from "@/lib/api-websocket";
 import { getAdminAccessToken } from "@/lib/auth/admin-token";
 
 type ApiNotif = {
@@ -49,6 +51,7 @@ async function markRead(id: string): Promise<void> {
 }
 
 export function AdminNotificationBell() {
+  const pathname = usePathname() || "";
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<ApiNotif[]>([]);
   const [loading, setLoading] = useState(false);
@@ -56,6 +59,11 @@ export function AdminNotificationBell() {
   const ref = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
+    const token = getAdminAccessToken();
+    if (!token) {
+      setItems([]);
+      return;
+    }
     setLoading(true);
     try {
       setItems(await fetchNotifications());
@@ -64,14 +72,84 @@ export function AdminNotificationBell() {
     }
   }, []);
 
+  /** Load on every dashboard route change (bell stays mounted in the shell). */
   useEffect(() => {
     void load();
+  }, [load, pathname]);
+
+  /** One delayed fetch after mount so the list loads even if the token wasn’t readable on the first paint. */
+  useEffect(() => {
+    const t = window.setTimeout(() => void load(), 400);
+    return () => clearTimeout(t);
   }, [load]);
 
   useEffect(() => {
     if (!open) return;
     void load();
   }, [open, load]);
+
+  /** Realtime inbox — staff receive `notification:new` as soon as a listing (etc.) is persisted. */
+  useEffect(() => {
+    const token = getAdminAccessToken();
+    if (!token) return;
+
+    let cancelled = false;
+    let ws: WebSocket | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const connect = () => {
+      if (cancelled) return;
+      const url = buildApiWebSocketUrl(`/ws?token=${encodeURIComponent(token)}`);
+      try {
+        ws = new WebSocket(url);
+      } catch {
+        retryTimer = setTimeout(connect, 5000);
+        return;
+      }
+
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(String(ev.data)) as { type?: string; payload?: ApiNotif };
+          if (msg.type !== "notification:new" || !msg.payload?._id) return;
+          const incoming = msg.payload;
+          setItems((prev) => {
+            if (prev.some((x) => x._id === incoming._id)) return prev;
+            return [incoming, ...prev];
+          });
+        } catch {
+          /* ignore malformed */
+        }
+      };
+
+      ws.onclose = (ev) => {
+        ws = null;
+        if (cancelled) return;
+        // Do not retry on auth / user errors (server closes with 4001–4003)
+        if (ev.code >= 4001 && ev.code <= 4003) return;
+        retryTimer = setTimeout(connect, 4000);
+      };
+
+      ws.onerror = () => {
+        try {
+          ws?.close();
+        } catch {
+          /* ignore */
+        }
+      };
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(retryTimer);
+      try {
+        ws?.close();
+      } catch {
+        /* ignore */
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) return;

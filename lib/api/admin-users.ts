@@ -19,6 +19,8 @@ export type AdminUserRow = {
   accountStatus: AdminAccountStatus;
   lastLogin: string;
   identityVerificationStatus: IdentityVerificationStatus;
+  emailVerified: boolean;
+  mobileVerifiedByAdmin: boolean;
 };
 
 export type AdminUserDetail = Record<string, unknown>;
@@ -62,6 +64,14 @@ function pickAccountStatus(
   }
 
   return "active";
+}
+
+function pickBool(o: Record<string, unknown>, keys: string[], fallback: boolean): boolean {
+  for (const k of keys) {
+    const v = o[k];
+    if (typeof v === "boolean") return v;
+  }
+  return fallback;
 }
 
 function pickIdentityStatus(
@@ -134,6 +144,8 @@ function mapItemToRow(raw: unknown): AdminUserRow | null {
     accountStatus: pickAccountStatus(o),
     lastLogin: formatLastLogin(lastLoginRaw),
     identityVerificationStatus: pickIdentityStatus(o),
+    emailVerified: pickBool(o, ["emailVerified"], false),
+    mobileVerifiedByAdmin: pickBool(o, ["mobileVerifiedByAdmin"], false),
   };
 }
 
@@ -441,11 +453,24 @@ export type PatchAdminUserResult =
   | { ok: true; user: AdminUserDetail }
   | { ok: false; message: string; status: number };
 
-export async function patchAdminUserActive(
+export type PatchAdminUserBody = {
+  isActive?: boolean;
+  emailVerified?: boolean;
+  mobileVerifiedByAdmin?: boolean;
+};
+
+export async function patchAdminUser(
   accessToken: string,
   userId: string,
-  isActive: boolean,
+  patch: PatchAdminUserBody,
 ): Promise<PatchAdminUserResult> {
+  const bodyJson = Object.fromEntries(
+    Object.entries(patch).filter(([, v]) => typeof v === "boolean"),
+  ) as Record<string, boolean>;
+  if (Object.keys(bodyJson).length === 0) {
+    return { ok: false, message: "Nothing to update.", status: 400 };
+  }
+
   let res: Response;
   try {
     res = await fetch(buildUrl(`${ADMIN_USERS_PATH}/${encodeURIComponent(userId)}`), {
@@ -456,7 +481,7 @@ export async function patchAdminUserActive(
         "Content-Type": "application/json",
         Authorization: `Bearer ${accessToken}`,
       },
-      body: JSON.stringify({ isActive }),
+      body: JSON.stringify(bodyJson),
     });
   } catch {
     return {
@@ -477,7 +502,7 @@ export async function patchAdminUserActive(
   if (!res.ok) {
     return {
       ok: false,
-      message: extractErrorMessage(body, res.status, "Could not update access."),
+      message: extractErrorMessage(body, res.status, "Could not update user."),
       status: res.status,
     };
   }
@@ -492,4 +517,12 @@ export async function patchAdminUserActive(
   }
 
   return { ok: true, user };
+}
+
+export async function patchAdminUserActive(
+  accessToken: string,
+  userId: string,
+  isActive: boolean,
+): Promise<PatchAdminUserResult> {
+  return patchAdminUser(accessToken, userId, { isActive });
 }

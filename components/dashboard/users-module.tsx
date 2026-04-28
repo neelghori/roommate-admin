@@ -7,12 +7,14 @@ import { Eye, X } from "lucide-react";
 import {
   fetchAdminUser,
   fetchAdminUsers,
+  patchAdminUser,
   patchAdminUserActive,
   postAdminIdentityReview,
   type AdminAccountStatus,
   type AdminUserDetail,
   type AdminUserRow,
   type IdentityVerificationStatus,
+  type PatchAdminUserBody,
 } from "@/lib/api/admin-users";
 import { formatAdminRoleLabel } from "@/lib/format-admin-role";
 import { getAdminAccessToken } from "@/lib/auth/admin-token";
@@ -115,9 +117,11 @@ function UserViewModal({
   rejectReason,
   onRejectReason,
   reviewBusy,
+  patchBusy,
   onClose,
   onApprove,
   onReject,
+  onPatchUser,
 }: {
   open: boolean;
   detail: AdminUserDetail | null;
@@ -125,9 +129,11 @@ function UserViewModal({
   rejectReason: string;
   onRejectReason: (v: string) => void;
   reviewBusy: boolean;
+  patchBusy: boolean;
   onClose: () => void;
   onApprove: () => void;
   onReject: () => void;
+  onPatchUser: (patch: PatchAdminUserBody) => void;
 }) {
   if (!open) return null;
 
@@ -146,6 +152,12 @@ function UserViewModal({
   const docUrl = pickFromDetail(detail ?? {}, ["identityDocumentUrl"]);
   const submitted = pickFromDetail(detail ?? {}, ["identitySubmittedAt"]);
   const rejection = pickFromDetail(detail ?? {}, ["identityRejectionReason"]);
+  const emailVerified =
+    typeof detail?.emailVerified === "boolean" ? detail.emailVerified : false;
+  const mobileVerifiedByAdmin =
+    typeof detail?.mobileVerifiedByAdmin === "boolean"
+      ? detail.mobileVerifiedByAdmin
+      : false;
 
   return (
     <div
@@ -211,6 +223,52 @@ function UserViewModal({
                 >
                   {identityLabel(idStatus)}
                 </span>
+              </dd>
+            </div>
+            <div className="grid gap-1 border-b border-neutral-100 py-2 sm:grid-cols-[120px_1fr]">
+              <dt className="text-xs font-semibold uppercase text-roommat-muted">Email verified</dt>
+              <dd className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${
+                    emailVerified
+                      ? "bg-emerald-50 text-emerald-800 ring-emerald-600/20"
+                      : "bg-neutral-100 text-neutral-600 ring-neutral-400/25"
+                  }`}
+                >
+                  {emailVerified ? "Yes" : "No"}
+                </span>
+                <button
+                  type="button"
+                  disabled={patchBusy}
+                  onClick={() => onPatchUser({ emailVerified: !emailVerified })}
+                  className="rounded-lg border border-neutral-200 bg-white px-2.5 py-1 text-xs font-semibold text-roommat-teal hover:bg-roommat-mint-bg/40 disabled:opacity-50"
+                >
+                  {emailVerified ? "Unmark" : "Mark verified"}
+                </button>
+              </dd>
+            </div>
+            <div className="grid gap-1 border-b border-neutral-100 py-2 sm:grid-cols-[120px_1fr]">
+              <dt className="text-xs font-semibold uppercase text-roommat-muted">Mobile (admin)</dt>
+              <dd className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${
+                    mobileVerifiedByAdmin
+                      ? "bg-sky-50 text-sky-900 ring-sky-600/20"
+                      : "bg-neutral-100 text-neutral-600 ring-neutral-400/25"
+                  }`}
+                >
+                  {mobileVerifiedByAdmin ? "Verified" : "Pending"}
+                </span>
+                <button
+                  type="button"
+                  disabled={patchBusy}
+                  onClick={() =>
+                    onPatchUser({ mobileVerifiedByAdmin: !mobileVerifiedByAdmin })
+                  }
+                  className="rounded-lg border border-neutral-200 bg-white px-2.5 py-1 text-xs font-semibold text-roommat-teal hover:bg-roommat-mint-bg/40 disabled:opacity-50"
+                >
+                  {mobileVerifiedByAdmin ? "Unmark" : "Mark verified"}
+                </button>
               </dd>
             </div>
             {submitted ? (
@@ -304,6 +362,7 @@ export function UsersModule({
   const [rejectReason, setRejectReason] = useState("");
   const [reviewBusy, setReviewBusy] = useState(false);
   const [accessBusyId, setAccessBusyId] = useState<string | null>(null);
+  const [userPatchBusy, setUserPatchBusy] = useState(false);
 
   const loadUsers = useCallback(async () => {
     const token = getAdminAccessToken();
@@ -372,6 +431,12 @@ export function UsersModule({
         if (s === "pending" || s === "verified" || s === "rejected" || s === "none") return s;
         return row.identityVerificationStatus;
       })();
+      const emailVerified =
+        typeof u.emailVerified === "boolean" ? u.emailVerified : row.emailVerified;
+      const mobileVerifiedByAdmin =
+        typeof u.mobileVerifiedByAdmin === "boolean"
+          ? u.mobileVerifiedByAdmin
+          : row.mobileVerifiedByAdmin;
 
       return prev.map((r) =>
         r.id === id
@@ -383,6 +448,8 @@ export function UsersModule({
               accountStatus: isActive ? "active" : "inactive",
               lastLogin: lastLoginRaw ? formatRelative(lastLoginRaw) : r.lastLogin,
               identityVerificationStatus: idStatus,
+              emailVerified,
+              mobileVerifiedByAdmin,
             }
           : r,
       );
@@ -437,6 +504,28 @@ export function UsersModule({
       mergeRowFromApiUser(res.user);
     },
     [viewUserId, rejectReason, mergeRowFromApiUser],
+  );
+
+  const runUserDetailPatch = useCallback(
+    async (patch: PatchAdminUserBody) => {
+      if (!viewUserId) return;
+      const token = getAdminAccessToken();
+      if (!token) {
+        toast.error("You are not signed in.");
+        return;
+      }
+      setUserPatchBusy(true);
+      const res = await patchAdminUser(token, viewUserId, patch);
+      setUserPatchBusy(false);
+      if (!res.ok) {
+        toast.error(res.message);
+        return;
+      }
+      toast.success("User updated.");
+      setViewDetail(res.user);
+      mergeRowFromApiUser(res.user);
+    },
+    [viewUserId, mergeRowFromApiUser],
   );
 
   const toggleAccountAccess = useCallback(
@@ -500,9 +589,11 @@ export function UsersModule({
         rejectReason={rejectReason}
         onRejectReason={setRejectReason}
         reviewBusy={reviewBusy}
+        patchBusy={userPatchBusy}
         onClose={closeUserView}
         onApprove={() => void runIdentityReview("verify")}
         onReject={() => void runIdentityReview("reject")}
+        onPatchUser={(patch) => void runUserDetailPatch(patch)}
       />
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -622,7 +713,7 @@ export function UsersModule({
                 {isLoading ? (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={9}
                       className="px-6 py-12 text-center text-roommat-muted"
                     >
                       Loading admin users…
@@ -631,7 +722,7 @@ export function UsersModule({
                 ) : filtered.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={9}
                       className="px-6 py-12 text-center text-roommat-muted"
                     >
                       {admins.length === 0
@@ -679,6 +770,28 @@ export function UsersModule({
                             className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${identityBadgeClasses(r.identityVerificationStatus)}`}
                           >
                             {identityLabel(r.identityVerificationStatus)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 sm:px-6">
+                          <span
+                            className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${
+                              r.emailVerified
+                                ? "bg-emerald-50 text-emerald-800 ring-emerald-600/20"
+                                : "bg-neutral-100 text-neutral-600 ring-neutral-400/25"
+                            }`}
+                          >
+                            {r.emailVerified ? "Yes" : "No"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 sm:px-6">
+                          <span
+                            className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${
+                              r.mobileVerifiedByAdmin
+                                ? "bg-sky-50 text-sky-900 ring-sky-600/20"
+                                : "bg-neutral-100 text-neutral-600 ring-neutral-400/25"
+                            }`}
+                          >
+                            {r.mobileVerifiedByAdmin ? "Yes" : "No"}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-roommat-muted sm:px-6">

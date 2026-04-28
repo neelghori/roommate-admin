@@ -54,8 +54,9 @@ function listingTypeLabel(code: string): string {
   const map: Record<string, string> = {
     pg: "PG",
     flat: "Flat",
-    room: "Room / rent",
+    room: "Room",
     roommate_seeker: "Roommate",
+    coworking_space: "Co-Working Space",
   };
   return map[c] ?? (code || "—");
 }

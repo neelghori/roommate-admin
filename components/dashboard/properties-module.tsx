@@ -22,6 +22,7 @@ type PropertiesModuleProps = {
 const TABS: { id: AdminPropertyStatusTab; label: string }[] = [
   { id: "queue", label: "Inbox" },
   { id: "approved", label: "Approved" },
+  { id: "on_hold", label: "On hold" },
   { id: "rejected", label: "Rejected" },
   { id: "all", label: "All" },
 ];
@@ -34,6 +35,8 @@ function statusPill(status: string) {
     return "bg-red-50 text-red-900 ring-red-600/20";
   if (s === "UNDER_REVIEW")
     return "bg-sky-50 text-sky-900 ring-sky-600/20";
+  if (s === "ON_HOLD")
+    return "bg-slate-50 text-slate-900 ring-slate-600/20";
   return "bg-amber-50 text-amber-900 ring-amber-600/20";
 }
 
@@ -52,9 +55,18 @@ function formatDate(iso: string): string {
   });
 }
 
-function canModerate(row: AdminPropertyRow): boolean {
+function showApproveButton(row: AdminPropertyRow): boolean {
   const m = (row.moderationStatus ?? "").toLowerCase();
-  return m === "pending" || m === "under_review";
+  return m !== "approved" && m !== "rejected";
+}
+
+function showOnHoldButton(row: AdminPropertyRow): boolean {
+  const m = (row.moderationStatus ?? "").toLowerCase();
+  return m !== "on_hold" && m !== "rejected";
+}
+
+function showModerationBar(row: AdminPropertyRow): boolean {
+  return (row.moderationStatus ?? "").toLowerCase() !== "rejected";
 }
 
 export function PropertiesModule({
@@ -129,6 +141,28 @@ export function PropertiesModule({
     [load, tab],
   );
 
+  const handleOnHold = useCallback(
+    async (row: AdminPropertyRow) => {
+      const token = getAdminAccessToken();
+      if (!token) {
+        toast.error("You are not signed in.");
+        return;
+      }
+      setActingId(row.id);
+      const res = await moderateAdminProperty(token, row.id, {
+        action: "on_hold",
+      });
+      setActingId(null);
+      if (!res.ok) {
+        toast.error(res.message);
+        return;
+      }
+      toast.success(`Listing on hold: ${row.title}`);
+      await load(tab);
+    },
+    [load, tab],
+  );
+
   const openReject = useCallback((row: AdminPropertyRow) => {
     setRejectTarget(row);
     setRejectReason("");
@@ -172,6 +206,7 @@ export function PropertiesModule({
     if (tab === "queue")
       return "No listings waiting for review. New owner submissions appear here.";
     if (tab === "approved") return "No approved listings match this view.";
+    if (tab === "on_hold") return "No listings on hold.";
     if (tab === "rejected") return "No rejected listings yet.";
     return "No properties found.";
   }, [tab]);
@@ -187,8 +222,8 @@ export function PropertiesModule({
             Properties
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-roommat-muted sm:text-base">
-            Review listings submitted by users. Approve to publish, or reject
-            with a reason — owners see the reason on their dashboard.
+            New listings appear on the site right away. Approve to add the verified badge; reject or on hold
+            removes them from public search.
           </p>
         </div>
       </div>
@@ -273,24 +308,36 @@ export function PropertiesModule({
                 >
                   View full details
                 </Link>
-                {canModerate(p) && (
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      type="button"
-                      disabled={actingId === p.id}
-                      onClick={() => void handleApprove(p)}
-                      className="flex-1 rounded-xl bg-roommat-teal py-2 text-xs font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
-                    >
-                      {actingId === p.id ? "Working…" : "Approve"}
-                    </button>
+                {showModerationBar(p) && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {showApproveButton(p) && (
+                      <button
+                        type="button"
+                        disabled={actingId === p.id}
+                        onClick={() => void handleApprove(p)}
+                        className="flex-1 min-w-[100px] rounded-xl bg-roommat-teal py-2 text-xs font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-50"
+                      >
+                        {actingId === p.id ? "Working…" : "Approve"}
+                      </button>
+                    )}
                     <button
                       type="button"
                       disabled={actingId === p.id}
                       onClick={() => openReject(p)}
-                      className="flex-1 rounded-xl border border-red-200 bg-red-50 py-2 text-xs font-semibold text-red-800 hover:bg-red-100 disabled:opacity-50"
+                      className="flex-1 min-w-[100px] rounded-xl border border-red-200 bg-red-50 py-2 text-xs font-semibold text-red-800 hover:bg-red-100 disabled:opacity-50"
                     >
                       Reject
                     </button>
+                    {showOnHoldButton(p) && (
+                      <button
+                        type="button"
+                        disabled={actingId === p.id}
+                        onClick={() => void handleOnHold(p)}
+                        className="flex-1 min-w-[100px] rounded-xl border border-slate-200 bg-slate-50 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100 disabled:opacity-50"
+                      >
+                        On hold
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

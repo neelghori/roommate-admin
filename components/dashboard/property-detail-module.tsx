@@ -64,9 +64,11 @@ function SectionTitle({ children }: { children: ReactNode }) {
 
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="grid gap-1 border-b border-neutral-100 py-2.5 sm:grid-cols-[160px_1fr] sm:items-start">
+    <div className="grid min-w-0 gap-1 border-b border-neutral-100 py-2.5 sm:grid-cols-[minmax(0,160px)_minmax(0,1fr)] sm:items-start">
       <dt className="text-xs font-semibold text-neutral-500">{label}</dt>
-      <dd className="break-words text-sm text-neutral-900">{value ?? "—"}</dd>
+      <dd className="min-w-0 text-sm text-neutral-900 wrap-anywhere">
+        {value ?? "—"}
+      </dd>
     </div>
   );
 }
@@ -138,8 +140,8 @@ export function PropertyDetailModule({
         </h1>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        <div className="space-y-6">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]">
+        <div className="min-w-0 space-y-6">
           {gallery.length > 0 && (
             <section className="rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
               <SectionTitle>Photos</SectionTitle>
@@ -302,8 +304,8 @@ export function PropertyDetailModule({
           )}
         </div>
 
-        <aside className="space-y-4">
-          <div className="rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
+        <aside className="min-w-0 space-y-4">
+          <div className="min-w-0 overflow-hidden rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
             <SectionTitle>Owner</SectionTitle>
             <dl className="mt-3 space-y-2 text-sm">
               <DetailRow label="Name" value={pickString(owner?.fullName)} />
@@ -312,7 +314,7 @@ export function PropertyDetailModule({
               <DetailRow label="Role" value={pickString(owner?.role)} />
             </dl>
           </div>
-          <div className="rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
+          <div className="min-w-0 overflow-hidden rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm">
             <SectionTitle>Record</SectionTitle>
             <dl className="mt-3">
               <DetailRow

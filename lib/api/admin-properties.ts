@@ -9,6 +9,7 @@ export type AdminPropertyStatusTab =
   | "under_review"
   | "approved"
   | "rejected"
+  | "on_hold"
   | "all";
 
 export type AdminPropertyRow = {
@@ -166,7 +167,7 @@ async function parseJsonResponse(res: Response): Promise<unknown> {
 export async function moderateAdminProperty(
   accessToken: string,
   propertyId: string,
-  body: { action: "approve" | "reject" | "under_review"; reason?: string },
+  body: { action: "approve" | "reject" | "under_review" | "on_hold"; reason?: string },
 ): Promise<ModeratePropertyResult> {
   const url = buildUrl(
     `${ADMIN_PROPERTIES_PATH}/${encodeURIComponent(propertyId)}/moderate`,

@@ -27,12 +27,26 @@ function pickString(v: unknown): string {
   return typeof v === "string" ? v : v != null ? String(v) : "";
 }
 
+function formatPeopleTypesForAdmin(raw: unknown): string {
+  if (!Array.isArray(raw) || raw.length === 0) return "—";
+  const labels: Record<string, string> = {
+    bachelor: "Bachelor",
+    working: "Working",
+    family: "Family",
+  };
+  const parts = raw
+    .map((x) => (typeof x === "string" ? labels[x.toLowerCase()] ?? x : ""))
+    .filter(Boolean);
+  return parts.length ? parts.join(", ") : "—";
+}
+
 const LISTING_TYPE_LABEL: Record<string, string> = {
   pg: "PG",
   flat: "Flat",
   room: "Room",
   roommate_seeker: "Roommate",
   coworking_space: "Co-Working Space",
+  house: "House",
 };
 
 type PropertyDetailModuleProps = {
@@ -191,6 +205,10 @@ export function PropertyDetailModule({
               <DetailRow
                 label="Gender preference"
                 value={pickString(property.genderPreference)}
+              />
+              <DetailRow
+                label="People types"
+                value={formatPeopleTypesForAdmin(property.peopleTypes)}
               />
               <DetailRow
                 label="Contact phone"

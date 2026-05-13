@@ -57,6 +57,7 @@ function listingTypeLabel(code: string): string {
     room: "Room",
     roommate_seeker: "Roommate",
     coworking_space: "Co-Working Space",
+    house: "House",
   };
   return map[c] ?? (code || "—");
 }

@@ -21,6 +21,7 @@ export type AdminPropertyRow = {
   listingType: string;
   city: string;
   price: number;
+  maxPrice?: number;
   status: string;
   moderationStatus?: string;
   isPublished?: boolean;
@@ -66,6 +67,10 @@ function mapRow(raw: unknown): AdminPropertyRow | null {
     listingType: pickString(o, ["listingType"]) ?? "",
     city: pickString(o, ["city"]) ?? "—",
     price: pickNumber(o, ["price"]),
+    maxPrice:
+      typeof o.maxPrice === "number" && !Number.isNaN(o.maxPrice) && o.maxPrice > pickNumber(o, ["price"])
+        ? o.maxPrice
+        : undefined,
     status: pickString(o, ["status"]) ?? "PENDING",
     moderationStatus: pickString(o, ["moderationStatus"]) ?? undefined,
     isPublished: typeof o.isPublished === "boolean" ? o.isPublished : undefined,

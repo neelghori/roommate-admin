@@ -40,9 +40,13 @@ function statusPill(status: string) {
   return "bg-amber-50 text-amber-900 ring-amber-600/20";
 }
 
-function formatPrice(n: number): string {
-  if (!n || Number.isNaN(n)) return "—";
-  return `₹${n.toLocaleString("en-IN")}`;
+function formatPrice(min: number, max?: number): string {
+  if (!min || Number.isNaN(min)) return "—";
+  const hi = max != null && !Number.isNaN(max) && max > min ? max : null;
+  if (hi != null) {
+    return `₹${min.toLocaleString("en-IN")} – ₹${hi.toLocaleString("en-IN")}`;
+  }
+  return `₹${min.toLocaleString("en-IN")}`;
 }
 
 function formatDate(iso: string): string {
@@ -272,7 +276,7 @@ export function PropertiesModule({
                   {p.type}
                 </span>
                 <span className="absolute bottom-3 right-4 text-base font-bold text-white">
-                  {formatPrice(p.price)}
+                  {formatPrice(p.price, p.maxPrice)}
                 </span>
               </div>
               <div className="flex flex-1 flex-col p-4">

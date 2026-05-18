@@ -52,7 +52,7 @@ function visitStatusPill(status: string): string {
 function listingTypeLabel(code: string): string {
   const c = code.toLowerCase();
   const map: Record<string, string> = {
-    pg: "PG",
+    pg: "PG/Hostel",
     flat: "Flat",
     room: "Room",
     roommate_seeker: "Roommate",

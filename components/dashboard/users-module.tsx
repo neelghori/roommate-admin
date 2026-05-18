@@ -16,7 +16,12 @@ import {
   type IdentityVerificationStatus,
   type PatchAdminUserBody,
 } from "@/lib/api/admin-users";
-import { formatAdminRoleLabel } from "@/lib/format-admin-role";
+import {
+  APP_USER_ROLES,
+  formatAdminRoleLabel,
+  isAppUserRole,
+  type AppUserRole,
+} from "@/lib/format-admin-role";
 import { getAdminAccessToken } from "@/lib/auth/admin-token";
 
 export type { AdminAccountStatus, AdminUserRow };
@@ -141,7 +146,10 @@ function UserViewModal({
     pickFromDetail(detail ?? {}, ["fullName", "name"]) ?? "—";
   const email = pickFromDetail(detail ?? {}, ["email"]) ?? "—";
   const mobile = pickFromDetail(detail ?? {}, ["mobile", "phone"]) ?? "—";
-  const role = pickFromDetail(detail ?? {}, ["role"]) ?? "—";
+  const roleRaw = pickFromDetail(detail ?? {}, ["role"]) ?? "";
+  const role = roleRaw || "—";
+  const canChangeRole = isAppUserRole(roleRaw);
+  const selectedAppRole: AppUserRole = isAppUserRole(roleRaw) ? roleRaw : "tenant";
   const active =
     typeof detail?.isActive === "boolean" ? detail.isActive : true;
   const idStatus = ((): IdentityVerificationStatus => {
@@ -209,7 +217,35 @@ function UserViewModal({
             </div>
             <div className="grid gap-1 border-b border-neutral-100 py-2 sm:grid-cols-[120px_1fr]">
               <dt className="text-xs font-semibold uppercase text-roommat-muted">Role</dt>
-              <dd className="text-neutral-900">{formatAdminRoleLabel(role)}</dd>
+              <dd className="text-neutral-900">
+                {canChangeRole ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      value={selectedAppRole}
+                      disabled={patchBusy}
+                      onChange={(e) => {
+                        const next = e.target.value as AppUserRole;
+                        if (next !== selectedAppRole) {
+                          onPatchUser({ role: next });
+                        }
+                      }}
+                      className="rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-900 outline-none focus:border-roommat-teal focus:ring-2 focus:ring-roommat-teal/20 disabled:opacity-50"
+                      aria-label="User role"
+                    >
+                      {APP_USER_ROLES.map((r) => (
+                        <option key={r} value={r}>
+                          {formatAdminRoleLabel(r)}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-xs text-roommat-muted">
+                      Super admin only
+                    </span>
+                  </div>
+                ) : (
+                  formatAdminRoleLabel(role)
+                )}
+              </dd>
             </div>
             <div className="grid gap-1 border-b border-neutral-100 py-2 sm:grid-cols-[120px_1fr]">
               <dt className="text-xs font-semibold uppercase text-roommat-muted">Account</dt>
@@ -521,7 +557,9 @@ export function UsersModule({
         toast.error(res.message);
         return;
       }
-      toast.success("User updated.");
+      toast.success(
+        patch.role ? "User role updated." : "User updated.",
+      );
       setViewDetail(res.user);
       mergeRowFromApiUser(res.user);
     },

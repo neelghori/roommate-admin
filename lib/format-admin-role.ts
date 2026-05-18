@@ -1,3 +1,12 @@
+/** App roles that admins may assign (tenant ↔ owner ↔ roommate). */
+export const APP_USER_ROLES = ["tenant", "owner", "roommate"] as const;
+
+export type AppUserRole = (typeof APP_USER_ROLES)[number];
+
+export function isAppUserRole(role: string): role is AppUserRole {
+  return APP_USER_ROLES.includes(role.trim().toLowerCase() as AppUserRole);
+}
+
 /**
  * Turns API role slugs into readable labels, e.g. `sub_admin` → `Sub Admin`.
  */

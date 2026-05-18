@@ -7,6 +7,7 @@ import { collectListingGalleryUrls } from "@/lib/listingGalleryUrls";
 import { AdminListingLocationMap } from "@/components/dashboard/admin-listing-location-map";
 import { mapRawListerToAdminView } from "@/components/dashboard/admin-resident-details";
 import { AdminResidentsListSection } from "@/components/dashboard/admin-residents-list-section";
+import { formatFurnishingLabel } from "@/lib/format-furnishing";
 
 function formatPrice(n: number): string {
   if (n == null || Number.isNaN(n)) return "—";
@@ -33,6 +34,7 @@ function formatPeopleTypesForAdmin(raw: unknown): string {
     bachelor: "Bachelor",
     working: "Working",
     family: "Family",
+    student: "Student",
   };
   const parts = raw
     .map((x) => (typeof x === "string" ? labels[x.toLowerCase()] ?? x : ""))
@@ -41,7 +43,7 @@ function formatPeopleTypesForAdmin(raw: unknown): string {
 }
 
 const LISTING_TYPE_LABEL: Record<string, string> = {
-  pg: "PG",
+  pg: "PG/Hostel",
   flat: "Flat",
   room: "Room",
   roommate_seeker: "Roommate",
@@ -187,6 +189,14 @@ export function PropertyDetailModule({
                 }
               />
               <DetailRow
+                label="Furnishing"
+                value={
+                  pickString(property.furnishing)
+                    ? formatFurnishingLabel(pickString(property.furnishing))
+                    : "—"
+                }
+              />
+              <DetailRow
                 label="Rent"
                 value={
                   minRent != null
@@ -204,6 +214,19 @@ export function PropertyDetailModule({
                 label="Available spots"
                 value={pickString(property.availableSpots)}
               />
+              {pickString(property.listingType)?.toLowerCase() === "pg" ? (
+                <DetailRow
+                  label="Minimum stay"
+                  value={
+                    typeof property.minimumStayMonths === "number" &&
+                    !Number.isNaN(property.minimumStayMonths)
+                      ? `${property.minimumStayMonths} month${
+                          property.minimumStayMonths === 1 ? "" : "s"
+                        }`
+                      : "—"
+                  }
+                />
+              ) : null}
               <DetailRow
                 label="Gender preference"
                 value={pickString(property.genderPreference)}

@@ -19,6 +19,7 @@ export type AdminPropertyRow = {
   ownerEmail: string;
   type: string;
   listingType: string;
+  furnishing: string;
   city: string;
   price: number;
   maxPrice?: number;
@@ -65,6 +66,7 @@ function mapRow(raw: unknown): AdminPropertyRow | null {
     ownerEmail: pickString(o, ["ownerEmail"]) ?? "—",
     type: pickString(o, ["type"]) ?? "—",
     listingType: pickString(o, ["listingType"]) ?? "",
+    furnishing: pickString(o, ["furnishing"]) ?? "",
     city: pickString(o, ["city"]) ?? "—",
     price: pickNumber(o, ["price"]),
     maxPrice:

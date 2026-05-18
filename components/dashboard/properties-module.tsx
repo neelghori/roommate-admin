@@ -286,6 +286,11 @@ export function PropertiesModule({
                 <p className="mt-1 text-xs text-roommat-muted">
                   {p.city} · {formatDate(p.createdAt)}
                 </p>
+                {p.furnishing ? (
+                  <p className="mt-1 text-xs font-medium text-neutral-700">
+                    {p.furnishing}
+                  </p>
+                ) : null}
                 <p className="mt-2 text-xs text-neutral-600">
                   <span className="font-medium text-neutral-800">Owner:</span>{" "}
                   {p.ownerName}

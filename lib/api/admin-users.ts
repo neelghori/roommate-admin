@@ -457,6 +457,7 @@ export type PatchAdminUserBody = {
   isActive?: boolean;
   emailVerified?: boolean;
   mobileVerifiedByAdmin?: boolean;
+  role?: "tenant" | "owner" | "roommate";
 };
 
 export async function patchAdminUser(
@@ -464,9 +465,13 @@ export async function patchAdminUser(
   userId: string,
   patch: PatchAdminUserBody,
 ): Promise<PatchAdminUserResult> {
-  const bodyJson = Object.fromEntries(
-    Object.entries(patch).filter(([, v]) => typeof v === "boolean"),
-  ) as Record<string, boolean>;
+  const bodyJson: Record<string, boolean | string> = {};
+  if (typeof patch.isActive === "boolean") bodyJson.isActive = patch.isActive;
+  if (typeof patch.emailVerified === "boolean") bodyJson.emailVerified = patch.emailVerified;
+  if (typeof patch.mobileVerifiedByAdmin === "boolean") {
+    bodyJson.mobileVerifiedByAdmin = patch.mobileVerifiedByAdmin;
+  }
+  if (patch.role) bodyJson.role = patch.role;
   if (Object.keys(bodyJson).length === 0) {
     return { ok: false, message: "Nothing to update.", status: 400 };
   }

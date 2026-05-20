@@ -239,6 +239,21 @@ export function PropertyDetailModule({
                 label="Contact phone"
                 value={pickString(property.contactPhone) || "—"}
               />
+              {pickString(property.youtubeUrl) ? (
+                <DetailRow
+                  label="YouTube"
+                  value={
+                    <a
+                      href={pickString(property.youtubeUrl)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-roommat-teal underline break-all"
+                    >
+                      {pickString(property.youtubeUrl)}
+                    </a>
+                  }
+                />
+              ) : null}
               <DetailRow
                 label="Published"
                 value={property.isPublished ? "Yes" : "No"}

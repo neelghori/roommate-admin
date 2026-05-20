@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
+  deleteAdminProperty,
   fetchAdminProperties,
   moderateAdminProperty,
   type AdminPropertyRow,
@@ -92,6 +93,8 @@ export function PropertiesModule({
   );
   const [rejectReason, setRejectReason] = useState("");
   const [rejectSubmitting, setRejectSubmitting] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<AdminPropertyRow | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
   const load = useCallback(async (nextTab: AdminPropertyStatusTab) => {
     const token = getAdminAccessToken();
@@ -177,6 +180,30 @@ export function PropertiesModule({
     setRejectTarget(null);
     setRejectReason("");
   }, [rejectSubmitting]);
+
+  const closeDelete = useCallback(() => {
+    if (deleteSubmitting) return;
+    setDeleteTarget(null);
+  }, [deleteSubmitting]);
+
+  const submitDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    const token = getAdminAccessToken();
+    if (!token) {
+      toast.error("You are not signed in.");
+      return;
+    }
+    setDeleteSubmitting(true);
+    const result = await deleteAdminProperty(token, deleteTarget.id);
+    setDeleteSubmitting(false);
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
+    toast.success("Listing deleted permanently.");
+    setDeleteTarget(null);
+    await load(tab);
+  }, [deleteTarget, load, tab]);
 
   const submitReject = useCallback(async () => {
     if (!rejectTarget) return;
@@ -349,9 +376,65 @@ export function PropertiesModule({
                     )}
                   </div>
                 )}
+                <button
+                  type="button"
+                  disabled={actingId === p.id || deleteSubmitting}
+                  onClick={() => setDeleteTarget(p)}
+                  className="mt-2 w-full rounded-xl border border-red-300 bg-white py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                >
+                  Delete permanently
+                </button>
               </div>
             </article>
           ))}
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-property-dialog-title"
+          onClick={closeDelete}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-neutral-100 bg-white p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2
+              id="delete-property-dialog-title"
+              className="text-lg font-bold text-neutral-900"
+            >
+              Delete listing?
+            </h2>
+            <p className="mt-2 text-sm text-neutral-600">
+              Permanently delete{" "}
+              <span className="font-medium text-neutral-900">
+                &quot;{deleteTarget.title}&quot;
+              </span>{" "}
+              from the database? Photos, saves, and bookings for this listing will be removed.
+              This cannot be undone.
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={closeDelete}
+                disabled={deleteSubmitting}
+                className="flex-1 rounded-xl border border-neutral-200 py-2.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitDelete()}
+                disabled={deleteSubmitting}
+                className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteSubmitting ? "Deleting…" : "Delete permanently"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

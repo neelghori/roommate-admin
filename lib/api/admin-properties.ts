@@ -308,3 +308,46 @@ export async function fetchAdminPropertyById(
 
   return { ok: true, property, summary };
 }
+
+export type DeleteAdminPropertyResult = MutationOk | MutationFailure;
+
+export async function deleteAdminProperty(
+  accessToken: string,
+  propertyId: string,
+): Promise<DeleteAdminPropertyResult> {
+  const url = buildUrl(
+    `${ADMIN_PROPERTIES_PATH}/${encodeURIComponent(propertyId)}`,
+  );
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "DELETE",
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+  } catch {
+    return {
+      ok: false,
+      message: "Cannot reach server. Is the API running?",
+      status: 0,
+    };
+  }
+
+  if (res.status === 204 || res.status === 200) {
+    return { ok: true, raw: null };
+  }
+
+  const data = await parseJsonResponse(res);
+  return {
+    ok: false,
+    message: extractErrorMessage(
+      data,
+      res.status,
+      "Could not delete property.",
+    ),
+    status: res.status,
+  };
+}

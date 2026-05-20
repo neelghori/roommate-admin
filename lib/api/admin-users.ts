@@ -531,3 +531,48 @@ export async function patchAdminUserActive(
 ): Promise<PatchAdminUserResult> {
   return patchAdminUser(accessToken, userId, { isActive });
 }
+
+export type DeleteAdminUserResult =
+  | { ok: true }
+  | { ok: false; message: string; status: number };
+
+export async function deleteAdminUser(
+  accessToken: string,
+  userId: string,
+): Promise<DeleteAdminUserResult> {
+  let res: Response;
+  try {
+    res = await fetch(buildUrl(`${ADMIN_USERS_PATH}/${encodeURIComponent(userId)}`), {
+      method: "DELETE",
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+  } catch {
+    return {
+      ok: false,
+      message: "Cannot reach server. Is the API running?",
+      status: 0,
+    };
+  }
+
+  if (res.status === 204 || res.status === 200) {
+    return { ok: true };
+  }
+
+  let body: unknown = null;
+  try {
+    const text = await res.text();
+    if (text) body = JSON.parse(text) as unknown;
+  } catch {
+    body = null;
+  }
+
+  return {
+    ok: false,
+    message: extractErrorMessage(body, res.status, "Could not delete user."),
+    status: res.status,
+  };
+}

@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Eye, X } from "lucide-react";
+import { AlertTriangle, Eye, Trash2, X } from "lucide-react";
 import {
+  deleteAdminUser,
   fetchAdminUser,
   fetchAdminUsers,
   patchAdminUser,
@@ -92,6 +93,11 @@ function identityBadgeClasses(status: IdentityVerificationStatus): string {
   }
 }
 
+function canDeleteUserRole(role: string): boolean {
+  const r = role.trim().toLowerCase();
+  return r !== "superadmin" && r !== "super_admin";
+}
+
 function identityLabel(status: IdentityVerificationStatus): string {
   switch (status) {
     case "verified":
@@ -113,6 +119,74 @@ function formatDetailDate(iso: string | null): string {
     dateStyle: "medium",
     timeStyle: "short",
   });
+}
+
+function DeleteUserConfirmModal({
+  target,
+  busy,
+  onClose,
+  onConfirm,
+}: {
+  target: AdminUserRow | null;
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  if (!target) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+      role="presentation"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-user-title"
+        className="w-full max-w-md rounded-2xl border border-neutral-100 bg-white p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id="delete-user-title" className="text-lg font-bold text-neutral-900">
+          Delete user?
+        </h2>
+        <div className="mt-4 flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100">
+            <AlertTriangle size={20} className="text-red-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-neutral-800">
+              This action cannot be undone
+            </p>
+            <p className="mt-1 text-sm text-neutral-600">
+              Permanently delete{" "}
+              <span className="font-medium text-neutral-900">{target.name}</span> (
+              {target.email})? Their listings and related data will be removed from the
+              database.
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 flex gap-3">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onClose}
+            className="flex-1 rounded-xl border border-neutral-200 py-2.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onConfirm}
+            className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            {busy ? "Deleting…" : "Delete permanently"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function UserViewModal({
@@ -373,6 +447,7 @@ function UserViewModal({
             ) : null}
           </dl>
         )}
+
       </div>
     </div>
   );
@@ -399,6 +474,8 @@ export function UsersModule({
   const [reviewBusy, setReviewBusy] = useState(false);
   const [accessBusyId, setAccessBusyId] = useState<string | null>(null);
   const [userPatchBusy, setUserPatchBusy] = useState(false);
+  const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AdminUserRow | null>(null);
 
   const loadUsers = useCallback(async () => {
     const token = getAdminAccessToken();
@@ -566,6 +643,29 @@ export function UsersModule({
     [viewUserId, mergeRowFromApiUser],
   );
 
+  const runDeleteUser = useCallback(
+    async (row: AdminUserRow) => {
+      const token = getAdminAccessToken();
+      if (!token) {
+        toast.error("You are not signed in.");
+        return;
+      }
+      setDeleteBusyId(row.id);
+      const result = await deleteAdminUser(token, row.id);
+      setDeleteBusyId(null);
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
+      toast.success("User deleted permanently.");
+      setDeleteTarget(null);
+      if (viewUserId === row.id) closeUserView();
+      setAdmins((prev) => prev.filter((u) => u.id !== row.id));
+      void loadUsers();
+    },
+    [viewUserId, closeUserView, loadUsers],
+  );
+
   const toggleAccountAccess = useCallback(
     async (row: AdminUserRow) => {
       const token = getAdminAccessToken();
@@ -632,6 +732,15 @@ export function UsersModule({
         onApprove={() => void runIdentityReview("verify")}
         onReject={() => void runIdentityReview("reject")}
         onPatchUser={(patch) => void runUserDetailPatch(patch)}
+      />
+
+      <DeleteUserConfirmModal
+        target={deleteTarget}
+        busy={deleteTarget != null && deleteBusyId === deleteTarget.id}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) void runDeleteUser(deleteTarget);
+        }}
       />
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -742,8 +851,8 @@ export function UsersModule({
                   <th className="px-4 py-3 sm:px-6">ID check</th>
                   <th className="px-4 py-3 sm:px-6">Last login</th>
                   <th className="px-4 py-3 text-right sm:px-6">Access</th>
-                  <th className="w-14 px-2 py-3 text-center sm:px-3">
-                    <span className="sr-only">View</span>
+                  <th className="px-2 py-3 text-center sm:px-3">
+                    <span className="sr-only">Actions</span>
                   </th>
                 </tr>
               </thead>
@@ -847,15 +956,28 @@ export function UsersModule({
                             />
                           </div>
                         </td>
-                        <td className="px-2 py-3 text-center sm:px-3">
-                          <button
-                            type="button"
-                            aria-label={`View ${r.name}`}
-                            onClick={() => void openUserView(r.id)}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-neutral-200 bg-white text-roommat-teal shadow-sm transition-colors hover:border-roommat-teal/40 hover:bg-roommat-mint-bg/40"
-                          >
-                            <Eye size={18} />
-                          </button>
+                        <td className="px-2 py-3 sm:px-3">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              aria-label={`View ${r.name}`}
+                              onClick={() => void openUserView(r.id)}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-neutral-200 bg-white text-roommat-teal shadow-sm transition-colors hover:border-roommat-teal/40 hover:bg-roommat-mint-bg/40"
+                            >
+                              <Eye size={18} />
+                            </button>
+                            {canDeleteUserRole(r.adminRole) ? (
+                              <button
+                                type="button"
+                                aria-label={`Delete ${r.name}`}
+                                disabled={deleteBusyId === r.id}
+                                onClick={() => setDeleteTarget(r)}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-200 bg-white text-red-600 shadow-sm transition-colors hover:border-red-300 hover:bg-red-50 disabled:opacity-50"
+                              >
+                                <Trash2 size={17} />
+                              </button>
+                            ) : null}
+                          </div>
                         </td>
                       </tr>
                     );

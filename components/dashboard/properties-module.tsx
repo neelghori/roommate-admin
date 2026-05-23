@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { Pin, PinOff } from "lucide-react";
 import {
   deleteAdminProperty,
   fetchAdminProperties,
   moderateAdminProperty,
+  setAdminPropertyFeatured,
   type AdminPropertyRow,
   type AdminPropertyStatusTab,
 } from "@/lib/api/admin-properties";
@@ -205,6 +207,46 @@ export function PropertiesModule({
     await load(tab);
   }, [deleteTarget, load, tab]);
 
+  const handleTogglePin = useCallback(
+    async (row: AdminPropertyRow) => {
+      const token = getAdminAccessToken();
+      if (!token) {
+        toast.error("You are not signed in.");
+        return;
+      }
+      const nextFeatured = !row.isFeatured;
+      setActingId(row.id);
+      const res = await setAdminPropertyFeatured(token, row.id, nextFeatured);
+      setActingId(null);
+      if (!res.ok) {
+        toast.error(res.message);
+        return;
+      }
+      toast.success(
+        nextFeatured
+          ? `"${row.title}" pinned to top of listings`
+          : `"${row.title}" unpinned`,
+      );
+      if (res.listing) {
+        setItems((prev) => {
+          const next = prev.map((item) =>
+            item.id === row.id ? res.listing! : item,
+          );
+          return [...next].sort((a, b) => {
+            if (a.isFeatured !== b.isFeatured) return a.isFeatured ? -1 : 1;
+            const at = a.featuredAt ? Date.parse(a.featuredAt) : 0;
+            const bt = b.featuredAt ? Date.parse(b.featuredAt) : 0;
+            if (at !== bt) return bt - at;
+            return Date.parse(b.createdAt) - Date.parse(a.createdAt);
+          });
+        });
+      } else {
+        await load(tab);
+      }
+    },
+    [load, tab],
+  );
+
   const submitReject = useCallback(async () => {
     if (!rejectTarget) return;
     const trimmed = rejectReason.trim();
@@ -254,7 +296,9 @@ export function PropertiesModule({
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-roommat-muted sm:text-base">
             New listings appear on the site right away. Approve to add the verified badge; reject or on hold
-            removes them from public search.
+            removes them from public search. Use{" "}
+            <span className="font-medium text-neutral-800">Pin to top</span> on any listing to show it first
+            on the website (when that listing is visible to users).
           </p>
         </div>
       </div>
@@ -325,12 +369,18 @@ export function PropertiesModule({
                 <p className="mt-0.5 truncate text-xs text-neutral-500">
                   {p.ownerEmail}
                 </p>
-                <div className="mt-3 flex items-center justify-between gap-2">
+                <div className="mt-3 flex flex-wrap items-center gap-2">
                   <span
                     className={`rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${statusPill(p.status)}`}
                   >
                     {p.status.replace(/_/g, " ")}
                   </span>
+                  {p.isFeatured ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-900 ring-1 ring-amber-600/20">
+                      <Pin className="h-3 w-3" aria-hidden />
+                      Pinned top
+                    </span>
+                  ) : null}
                 </div>
                 {p.rejectionReason && p.status === "REJECTED" && (
                   <p className="mt-2 line-clamp-3 rounded-lg bg-red-50/80 px-2 py-1.5 text-[11px] text-red-900">
@@ -338,9 +388,32 @@ export function PropertiesModule({
                     {p.rejectionReason}
                   </p>
                 )}
+                <button
+                  type="button"
+                  disabled={actingId === p.id}
+                  onClick={() => void handleTogglePin(p)}
+                  className={[
+                    "mt-4 flex w-full items-center justify-center gap-2 rounded-xl py-2 text-xs font-semibold transition disabled:opacity-50",
+                    p.isFeatured
+                      ? "border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                      : "border border-roommat-teal/40 bg-white text-roommat-teal hover:bg-roommat-mint-bg",
+                  ].join(" ")}
+                >
+                  {p.isFeatured ? (
+                    <>
+                      <PinOff className="h-3.5 w-3.5" aria-hidden />
+                      {actingId === p.id ? "Working…" : "Unpin from top"}
+                    </>
+                  ) : (
+                    <>
+                      <Pin className="h-3.5 w-3.5" aria-hidden />
+                      {actingId === p.id ? "Working…" : "Pin to top"}
+                    </>
+                  )}
+                </button>
                 <Link
                   href={`/dashboard/properties/${p.id}`}
-                  className="mt-4 block w-full rounded-xl border border-roommat-teal/30 bg-roommat-mint-bg py-2 text-center text-xs font-semibold text-roommat-teal transition hover:bg-roommat-teal/10"
+                  className="mt-2 block w-full rounded-xl border border-roommat-teal/30 bg-roommat-mint-bg py-2 text-center text-xs font-semibold text-roommat-teal transition hover:bg-roommat-teal/10"
                 >
                   View full details
                 </Link>

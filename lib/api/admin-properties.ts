@@ -28,6 +28,8 @@ export type AdminPropertyRow = {
   isPublished?: boolean;
   rejectionReason: string;
   createdAt: string;
+  isFeatured?: boolean;
+  featuredAt?: string;
 };
 
 function buildUrl(path: string): string {
@@ -78,6 +80,8 @@ function mapRow(raw: unknown): AdminPropertyRow | null {
     isPublished: typeof o.isPublished === "boolean" ? o.isPublished : undefined,
     rejectionReason: pickString(o, ["rejectionReason"]) ?? "",
     createdAt: pickString(o, ["createdAt"]) ?? "",
+    isFeatured: o.isFeatured === true,
+    featuredAt: pickString(o, ["featuredAt"]) ?? "",
   };
 }
 
@@ -218,6 +222,63 @@ export async function moderateAdminProperty(
   }
 
   return { ok: true, raw: data };
+}
+
+function extractListingFromMutation(body: unknown): AdminPropertyRow | null {
+  if (!body || typeof body !== "object") return null;
+  const root = body as Record<string, unknown>;
+  const data = root.data;
+  if (!data || typeof data !== "object") return null;
+  const listing = (data as Record<string, unknown>).listing;
+  return mapRow(listing);
+}
+
+export type SetAdminPropertyFeaturedResult = MutationOk | MutationFailure;
+
+export async function setAdminPropertyFeatured(
+  accessToken: string,
+  propertyId: string,
+  featured: boolean,
+): Promise<SetAdminPropertyFeaturedResult & { listing?: AdminPropertyRow }> {
+  const url = buildUrl(
+    `${ADMIN_PROPERTIES_PATH}/${encodeURIComponent(propertyId)}/featured`,
+  );
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "PATCH",
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ featured }),
+    });
+  } catch {
+    return {
+      ok: false,
+      message: "Cannot reach server. Is the API running?",
+      status: 0,
+    };
+  }
+
+  const data = await parseJsonResponse(res);
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      message: extractErrorMessage(
+        data,
+        res.status,
+        "Could not update pin status.",
+      ),
+      status: res.status,
+    };
+  }
+
+  const listing = extractListingFromMutation(data);
+  return { ok: true, raw: data, listing: listing ?? undefined };
 }
 
 export type FetchAdminPropertyDetailSuccess = {

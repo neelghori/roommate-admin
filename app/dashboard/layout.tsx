@@ -1,6 +1,7 @@
 import { Poppins } from "next/font/google";
 import type { ReactNode } from "react";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { AdminWebPushManager } from "@/components/shared/admin-web-push-manager";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -18,6 +19,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       }}
     >
       <DashboardShell>{children}</DashboardShell>
+      <AdminWebPushManager />
     </div>
   );
 }

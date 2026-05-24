@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getPublicApiBaseUrl } from "@/lib/env";
 import { buildApiWebSocketUrl } from "@/lib/api-websocket";
 import { getAdminAccessToken } from "@/lib/auth/admin-token";
+import { adminPushService } from "@/lib/push/admin-push.service";
 
 type ApiNotif = {
   _id: string;
@@ -56,6 +57,7 @@ export function AdminNotificationBell() {
   const [items, setItems] = useState<ApiNotif[]>([]);
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<ApiNotif | null>(null);
+  const [pushBusy, setPushBusy] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -116,6 +118,7 @@ export function AdminNotificationBell() {
             if (prev.some((x) => x._id === incoming._id)) return prev;
             return [incoming, ...prev];
           });
+          adminPushService.showBrowserNotification(incoming);
         } catch {
           /* ignore malformed */
         }
@@ -180,6 +183,23 @@ export function AdminNotificationBell() {
     setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
   };
 
+  const enablePush = async () => {
+    if (!adminPushService.supportsWebPush()) return;
+    setPushBusy(true);
+    try {
+      const perm = await adminPushService.requestPermission();
+      if (perm !== "granted") return;
+      await adminPushService.subscribeAndSave();
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const pushAvailable =
+    adminPushService.supportsWebPush() &&
+    typeof Notification !== "undefined" &&
+    Notification.permission !== "granted";
+
   return (
     <div className="relative" ref={ref}>
       <button
@@ -240,6 +260,18 @@ export function AdminNotificationBell() {
               ))
             )}
           </div>
+          {pushAvailable ? (
+            <div className="border-t border-neutral-100 px-4 py-2.5">
+              <button
+                type="button"
+                disabled={pushBusy}
+                onClick={() => void enablePush()}
+                className="w-full rounded-lg bg-roommat-mint-bg py-2 text-[11px] font-semibold text-roommat-teal hover:bg-roommat-teal/10 disabled:opacity-50"
+              >
+                {pushBusy ? "Enabling…" : "Enable browser alerts"}
+              </button>
+            </div>
+          ) : null}
           <Link
             href="/dashboard/properties"
             className="block border-t border-neutral-100 py-2.5 text-center text-[11px] font-bold uppercase tracking-wide text-roommat-teal hover:bg-neutral-50"
